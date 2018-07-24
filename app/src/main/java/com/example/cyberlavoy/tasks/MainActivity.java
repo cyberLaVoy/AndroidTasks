@@ -4,6 +4,7 @@ import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.widget.Toast;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.Callable;
@@ -28,35 +29,52 @@ public class MainActivity extends AppCompatActivity {
         body.put("password", password);
         body.put("fname", fname);
         body.put("lname", lname);
-        RequestHandler.getInstance(getApplicationContext()).handlePostRequest(url, body, null);
+        RequestHandler.getInstance(getApplicationContext()).handlePOSTRequest(url, body, null);
+    }
+    /*
+    short_description
+    long_description
+    priority
+    desired_completion_date
+    due_date
+    date_entered
+    completion_status
+    */
+    public void createTask(String shortDescription) {
+        String url = "https://afternoon-wave-54596.herokuapp.com/todos";
+        Map<String, String> body = new HashMap<String, String>();
+        body.put("short_description", shortDescription);
+        RequestHandler.getInstance(getApplicationContext()).handlePOSTRequest(url, body, null);
     }
     public void Authenticate(String email, String password) {
         String url = "https://afternoon-wave-54596.herokuapp.com/sessions";
         Map<String, String> body = new HashMap<String, String>();
         body.put("email", email);
         body.put("password", password);
-        RequestHandler.getInstance(getApplicationContext()).handlePostRequest(url, body, new Callable<Integer>() {
+        RequestHandler.getInstance(getApplicationContext()).handlePOSTRequest(url, body, new Callable<Integer>() {
             @Override
             public Integer call() throws Exception {
-                return getTasks();
+                createTask("Something.");
+                getTasks();
+                return 1;
             }
         });
     }
 
     // GET methods
-    public Integer getTasks() {
+    public void getTasks() {
         String url = "https://afternoon-wave-54596.herokuapp.com/todos";
-        RequestHandler.getInstance(getApplicationContext()).handleGetRequest(url, new Callable<Integer>() {
+        final ArrayList onResponseArray = new ArrayList();
+        RequestHandler.getInstance(getApplicationContext()).handleGETRequest(url, onResponseArray, new Callable<Integer>() {
             @Override
             public Integer call() throws Exception {
-                return updateUI();
+                updateUI(onResponseArray);
+                return 1;
             }
         });
-        return 1;
     }
 
-    public Integer updateUI() {
-        Toast.makeText(this, "", Toast.LENGTH_LONG).show();
-        return 1;
+    public void updateUI(ArrayList<String> onResponseArray) {
+        Toast.makeText(this, onResponseArray.get(0), Toast.LENGTH_LONG).show();
     }
 }

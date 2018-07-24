@@ -13,13 +13,14 @@ import com.android.volley.Response;
 import com.android.volley.VolleyError;
 import com.android.volley.VolleyLog;
 import com.android.volley.toolbox.HttpHeaderParser;
-import com.android.volley.toolbox.JsonArrayRequest;
+import com.android.volley.toolbox.JsonObjectRequest;
 import com.android.volley.toolbox.StringRequest;
 import com.android.volley.toolbox.Volley;
 
-import org.json.JSONArray;
+import org.json.JSONObject;
 
 import java.io.UnsupportedEncodingException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.Callable;
@@ -33,7 +34,7 @@ public class RequestHandler {
     private static RequestHandler mInstance;
     private RequestQueue mRequestQueue;
     private static Context mContext;
-    private static String mSessionCookie;
+    private static String mSessionCookie = "";
 
     private RequestHandler(Context context) {
         mContext = context;
@@ -47,8 +48,6 @@ public class RequestHandler {
     }
     private RequestQueue getRequestQueue() {
         if (mRequestQueue == null) {
-            // getApplicationContext() is key, it keeps you from leaking the
-            // Activity or BroadcastReceiver if someone passes one in.
             mRequestQueue = Volley.newRequestQueue(mContext.getApplicationContext());
         }
         return mRequestQueue;
@@ -56,16 +55,37 @@ public class RequestHandler {
     public <T> void addToRequestQueue(Request<T> req) {
         getRequestQueue().add(req);
     }
-    public void handleGetRequest(String url, @Nullable final Callable<Integer> callback) {
-        JsonArrayRequest jsonObjectRequest = new JsonArrayRequest
-                (Request.Method.GET, url, null, new Response.Listener<JSONArray>() {
+
+    private Map<String, String> attachSessionCookie() {
+        HashMap<String, String> headers = new HashMap<String, String>();
+        headers.put("Cookie", mSessionCookie);
+        return headers;
+    }
+    private void setSessionCookie(NetworkResponse response) {
+        Map<String, String> responseHeaders = response.headers;
+        mSessionCookie = responseHeaders.get("Set-Cookie");
+    }
+    private String parseMapBody(Map<String, String> body) {
+        String parsedString = "";
+        for (Map.Entry<String,String> entry : body.entrySet())
+            parsedString += entry.getKey() + "=" + entry.getValue() + "&";
+        return parsedString.substring(0, parsedString.length()-1);
+    }
+    public void handleGETRequest(String url, @Nullable final ArrayList<String> onResponseArray, @Nullable final Callable<Integer> onResponseCallBack) {
+        JsonObjectRequest jsonObjectRequest = new JsonObjectRequest
+                (Request.Method.GET, url, null, new Response.Listener<JSONObject>() {
                     @Override
-                    public void onResponse(JSONArray response) {
-                        try {
-                            callback.call();
+                    public void onResponse(JSONObject response) {
+                        if (onResponseArray != null) {
+                            onResponseArray.add(response.toString());
                         }
-                        catch (java.lang.Exception e) {
-                            Log.e(TAG, "GET callback function error", e);
+                        onResponseArray.add(response.toString());
+                        if (onResponseCallBack != null) {
+                            try {
+                                onResponseCallBack.call();
+                            } catch (java.lang.Exception e) {
+                                Log.e(TAG, "GET callback function error", e);
+                            }
                         }
                     }
                 }, new Response.ErrorListener() {
@@ -75,33 +95,25 @@ public class RequestHandler {
                     }
                 })
         {
-            //Send sessionID cookie with every GET request
             @Override
             public Map<String, String> getHeaders() throws AuthFailureError {
-                HashMap<String, String> headers = new HashMap<String, String>();
-                headers.put("Cookie", mSessionCookie);
-                return headers;
+                return attachSessionCookie();
             }
         };
         addToRequestQueue(jsonObjectRequest);
     }
 
-    private String parseMapBody(Map<String, String> body) {
-        String parsedString = "";
-        for (Map.Entry<String,String> entry : body.entrySet())
-            parsedString += entry.getKey() + "=" + entry.getValue() + "&";
-        return parsedString.substring(0, parsedString.length()-1);
-    }
-    public void handlePostRequest(String url, Map<String, String> body, @Nullable final Callable<Integer> callback) {
+    public void handlePOSTRequest(String url, Map<String, String> body, @Nullable final Callable<Integer> onResponseCallBack) {
         final String requestBody = parseMapBody(body);
         StringRequest stringRequest = new StringRequest(Request.Method.POST, url, new Response.Listener<String>() {
             @Override
             public void onResponse(String response) {
-                try {
-                    callback.call();
-                }
-                catch (java.lang.Exception e) {
-                    Log.e(TAG, "POST callback function error", e);
+                if (onResponseCallBack != null) {
+                    try {
+                        onResponseCallBack.call();
+                    } catch (java.lang.Exception e) {
+                        Log.e(TAG, "POST callback function error", e);
+                    }
                 }
             }
         }, new Response.ErrorListener() {
@@ -109,7 +121,8 @@ public class RequestHandler {
             public void onErrorResponse(VolleyError error) {
                 Log.e(TAG, error.toString());
             }
-        }) {
+        })
+        {
             @Override
             public String getBodyContentType() {
                 return "application/x-www-form-urlencoded; charset=utf-8";
@@ -123,17 +136,21 @@ public class RequestHandler {
                     return null;
                 }
             }
-            // set the sessionID upon response
             @Override
             protected Response<String> parseNetworkResponse(NetworkResponse response) {
                 try {
-                    Map<String, String> responseHeaders = response.headers;
-                    mSessionCookie = responseHeaders.get("Set-Cookie");
+                    if (mSessionCookie == "") {
+                        setSessionCookie(response);
+                    }
                     String jsonString = new String(response.data, HttpHeaderParser.parseCharset(response.headers));
                     return Response.success(jsonString, HttpHeaderParser.parseCacheHeaders(response));
                 } catch (UnsupportedEncodingException e) {
                     return Response.error(new ParseError(e));
                 }
+            }
+            @Override
+            public Map<String, String> getHeaders() throws AuthFailureError {
+                return attachSessionCookie();
             }
         };
         addToRequestQueue(stringRequest);
