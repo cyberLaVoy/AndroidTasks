@@ -20,7 +20,6 @@ import com.android.volley.toolbox.Volley;
 import org.json.JSONObject;
 
 import java.io.UnsupportedEncodingException;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.Callable;
@@ -34,7 +33,7 @@ public class RequestHandler {
     private static RequestHandler mInstance;
     private RequestQueue mRequestQueue;
     private static Context mContext;
-    private static String mSessionCookie = "";
+    private static String mSessionCookie;
 
     private RequestHandler(Context context) {
         mContext = context;
@@ -65,21 +64,20 @@ public class RequestHandler {
         Map<String, String> responseHeaders = response.headers;
         mSessionCookie = responseHeaders.get("Set-Cookie");
     }
-    private String parseMapBody(Map<String, String> body) {
+    private String mapBodyToQS(Map<String, String> body) {
         String parsedString = "";
         for (Map.Entry<String,String> entry : body.entrySet())
             parsedString += entry.getKey() + "=" + entry.getValue() + "&";
         return parsedString.substring(0, parsedString.length()-1);
     }
-    public void handleGETRequest(String url, @Nullable final ArrayList<String> onResponseArray, @Nullable final Callable<Integer> onResponseCallBack) {
+    public void handleGETRequest(String url, @Nullable final String[] onResponseArray, @Nullable final Callable<Integer> onResponseCallBack) {
         JsonObjectRequest jsonObjectRequest = new JsonObjectRequest
                 (Request.Method.GET, url, null, new Response.Listener<JSONObject>() {
                     @Override
                     public void onResponse(JSONObject response) {
                         if (onResponseArray != null) {
-                            onResponseArray.add(response.toString());
+                            onResponseArray[0] = response.toString();
                         }
-                        onResponseArray.add(response.toString());
                         if (onResponseCallBack != null) {
                             try {
                                 onResponseCallBack.call();
@@ -103,11 +101,14 @@ public class RequestHandler {
         addToRequestQueue(jsonObjectRequest);
     }
 
-    public void handlePOSTRequest(String url, Map<String, String> body, @Nullable final Callable<Integer> onResponseCallBack) {
-        final String requestBody = parseMapBody(body);
+    public void handlePOSTRequest(String url, Map<String, String> body, @Nullable final String[] onResponseArray, @Nullable final Callable<Integer> onResponseCallBack) {
+        final String requestBody = mapBodyToQS(body);
         StringRequest stringRequest = new StringRequest(Request.Method.POST, url, new Response.Listener<String>() {
             @Override
             public void onResponse(String response) {
+                if (onResponseArray != null) {
+                    onResponseArray[0] = response.toString();
+                }
                 if (onResponseCallBack != null) {
                     try {
                         onResponseCallBack.call();
@@ -138,14 +139,99 @@ public class RequestHandler {
             }
             @Override
             protected Response<String> parseNetworkResponse(NetworkResponse response) {
+                setSessionCookie(response);
                 try {
-                    if (mSessionCookie == "") {
-                        setSessionCookie(response);
-                    }
-                    String jsonString = new String(response.data, HttpHeaderParser.parseCharset(response.headers));
-                    return Response.success(jsonString, HttpHeaderParser.parseCacheHeaders(response));
+                    String responseBody = new String(response.data, HttpHeaderParser.parseCharset(response.headers));
+                    return Response.success(responseBody, HttpHeaderParser.parseCacheHeaders(response));
                 } catch (UnsupportedEncodingException e) {
                     return Response.error(new ParseError(e));
+                }
+            }
+            @Override
+            public Map<String, String> getHeaders() throws AuthFailureError {
+                return attachSessionCookie();
+            }
+        };
+        addToRequestQueue(stringRequest);
+    }
+
+    public void handlePUTRequest(String url, Map<String, String> body, @Nullable final String[] onResponseArray, @Nullable final Callable<Integer> onResponseCallBack) {
+        final String requestBody = mapBodyToQS(body);
+        StringRequest stringRequest = new StringRequest(Request.Method.PUT, url, new Response.Listener<String>() {
+            @Override
+            public void onResponse(String response) {
+                if (onResponseArray != null) {
+                    onResponseArray[0] = response.toString();
+                }
+                if (onResponseCallBack != null) {
+                    try {
+                        onResponseCallBack.call();
+                    } catch (java.lang.Exception e) {
+                        Log.e(TAG, "POST callback function error", e);
+                    }
+                }
+            }
+        }, new Response.ErrorListener() {
+            @Override
+            public void onErrorResponse(VolleyError error) {
+                Log.e(TAG, error.toString());
+            }
+        })
+        {
+            @Override
+            public String getBodyContentType() {
+                return "application/x-www-form-urlencoded; charset=utf-8";
+            }
+            @Override
+            public byte[] getBody() throws AuthFailureError {
+                try {
+                    return requestBody == null ? null : requestBody.getBytes("utf-8");
+                } catch (UnsupportedEncodingException uee) {
+                    VolleyLog.wtf("Unsupported Encoding while trying to get the bytes of %s using %s", requestBody, "utf-8");
+                    return null;
+                }
+            }
+            @Override
+            public Map<String, String> getHeaders() throws AuthFailureError {
+                return attachSessionCookie();
+            }
+        };
+        addToRequestQueue(stringRequest);
+    }
+        public void handleDELETERequest(String url, Map<String, String> body, @Nullable final String[] onResponseArray, @Nullable final Callable<Integer> onResponseCallBack) {
+        final String requestBody = mapBodyToQS(body);
+        StringRequest stringRequest = new StringRequest(Request.Method.DELETE, url, new Response.Listener<String>() {
+            @Override
+            public void onResponse(String response) {
+                if (onResponseArray != null) {
+                    onResponseArray[0] = response.toString();
+                }
+                if (onResponseCallBack != null) {
+                    try {
+                        onResponseCallBack.call();
+                    } catch (java.lang.Exception e) {
+                        Log.e(TAG, "POST callback function error", e);
+                    }
+                }
+            }
+        }, new Response.ErrorListener() {
+            @Override
+            public void onErrorResponse(VolleyError error) {
+                Log.e(TAG, error.toString());
+            }
+        })
+        {
+            @Override
+            public String getBodyContentType() {
+                return "application/x-www-form-urlencoded; charset=utf-8";
+            }
+            @Override
+            public byte[] getBody() throws AuthFailureError {
+                try {
+                    return requestBody == null ? null : requestBody.getBytes("utf-8");
+                } catch (UnsupportedEncodingException uee) {
+                    VolleyLog.wtf("Unsupported Encoding while trying to get the bytes of %s using %s", requestBody, "utf-8");
+                    return null;
                 }
             }
             @Override
